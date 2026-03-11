@@ -17,4 +17,6 @@ Lists.DEBUFFS = {
     BOMBARDMENTS = 393994,
 }
 
+Lists.SPECIAL_DISPELS = {}
+
 return Lists

@@ -4,6 +4,7 @@ if not plugin.load then return end
 
 local spells = require("spells")
 local funcs = require("functions")
+local enums = require("common/enums")
 local menu = require("menu")
 local ui = require("ui")
 
@@ -16,6 +17,44 @@ callback.quell = function()
     if target then
         return spells.QUELL:cast(target, "Quell")
     end
+    return false
+end
+
+callback.dispel = function()
+    local target, debuff_id, debuff_type = funcs.check_all_dispels(30)
+    if not target then return false end
+
+    -- Determine which dispels are compatible with this debuff type
+    -- Expunge: Poison
+    -- Cauterizing Flame: Poison, Curse, Disease
+    local can_expunge = false
+    local can_cauterize = false
+
+    if debuff_type == enums.buff_type.POISON then
+        can_expunge = true
+        can_cauterize = true
+    elseif debuff_type == enums.buff_type.CURSE then
+        can_cauterize = true
+    elseif debuff_type == enums.buff_type.DISEASE then
+        can_cauterize = true
+    else
+        -- Unknown or unrecognized type — try both as fallback
+        can_expunge = true
+        can_cauterize = true
+    end
+
+    -- Try Expunge first if compatible (shorter CD typically)
+    if can_expunge and spells.EXPUNGE:is_learned() and spells.EXPUNGE:cooldown_up() then
+        return spells.EXPUNGE:cast(target, "Expunge (" .. tostring(debuff_id) .. ")",
+            { skip_facing = true })
+    end
+
+    -- Fallback to Cauterizing Flame if compatible
+    if can_cauterize and spells.CAUTERIZING_FLAME:is_learned() and spells.CAUTERIZING_FLAME:cooldown_up() then
+        return spells.CAUTERIZING_FLAME:cast(target, "Cauterize (" .. tostring(debuff_id) .. ")",
+            { skip_facing = true })
+    end
+
     return false
 end
 
@@ -147,6 +186,8 @@ local function on_update()
     local me = izi.me()
     if not me or not me:is_valid() or me:is_mounted() or me:is_dead_or_ghost() then return end
 
+    funcs.update_party_cache()
+
     if not menu.is_enabled() then return end
     if not menu.is_rotation_enabled() then return end
 
@@ -162,7 +203,11 @@ local function on_update()
     if me:affecting_combat() then
         funcs.autotarget()
         if callback.quell() then return end
+        if callback.dispel() then return end
         if actionList.dps() then return end
+    else
+        -- Out of combat checks
+        if callback.dispel() then return end
     end
 end
 
